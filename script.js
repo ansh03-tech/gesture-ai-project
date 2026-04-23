@@ -3,7 +3,7 @@
  * All frontend logic: camera, prediction loop, training, profiles.
  */
 
-const API = "http://localhost:5000"; // change if hosted elsewhere
+const API = "https://gesture-ai-project.onrender.com"; // change if hosted elsewhere
 
 // ── Page navigation ───────────────────────────────────────────────────────
 document.querySelectorAll(".nav-btn").forEach(btn => {
