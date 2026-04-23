@@ -32,6 +32,18 @@ def extract_landmarks(image):
 
     return landmarks
 
+
+# ── PROFILE SYSTEM (FIX) ───────────────────────
+PROFILES = {
+    "default": {
+        "thumbs_up": "volume_up",
+        "thumbs_down": "volume_down"
+    }
+}
+
+active_profile = "default"
+
+
 # ── Serve frontend ─────────────────────────────
 @app.route("/")
 def serve_index():
@@ -41,18 +53,47 @@ def serve_index():
 def serve_static(path):
     return send_from_directory(".", path)
 
-# ── STATUS ─────────────────────────────────────
+
+# ── STATUS (FIXED) ─────────────────────────────
 @app.route("/status")
 def status():
     return jsonify({
         "status": "ok",
         "model_trained": True,
         "gestures": labels,
-        "active_profile": "default",
-        "profile_mapping": {}
+        "active_profile": active_profile,
+        "profile_mapping": PROFILES.get(active_profile, {})
     })
 
-# ── PREDICT (REAL IMPLEMENTATION) ──────────────
+
+# ── PROFILES API (FIXES YOUR ERROR) ────────────
+@app.route("/profiles")
+def get_profiles():
+    return jsonify({
+        "profiles": list(PROFILES.keys())
+    })
+
+@app.route("/profile/<name>")
+def get_profile(name):
+    return jsonify(PROFILES.get(name, {}))
+
+@app.route("/profile/<name>", methods=["POST"])
+def save_profile(name):
+    PROFILES[name] = request.json
+    return jsonify({"status": "saved"})
+
+@app.route("/switch_profile/<name>", methods=["POST"])
+def switch_profile(name):
+    global active_profile
+    if name in PROFILES:
+        active_profile = name
+
+    return jsonify({
+        "mapping": PROFILES.get(active_profile, {})
+    })
+
+
+# ── PREDICT (REAL PIPELINE) ────────────────────
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
@@ -66,7 +107,7 @@ def predict():
         np_arr = np.frombuffer(img_bytes, np.uint8)
         img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-        # Extract landmarks using MediaPipe
+        # Extract landmarks
         landmarks = extract_landmarks(img)
 
         if landmarks is None:
@@ -74,7 +115,7 @@ def predict():
                 "hand_detected": False,
                 "gesture": None,
                 "confidence": 0,
-                "profile": "default",
+                "profile": active_profile,
                 "last_action": None,
                 "action": None,
                 "stable": False
@@ -85,18 +126,26 @@ def predict():
         probs = model.predict_proba(arr)[0]
         idx = int(np.argmax(probs))
 
+        gesture = labels[idx]
+        confidence = round(float(probs[idx]) * 100, 2)
+
+        # Get mapped action
+        mapping = PROFILES.get(active_profile, {})
+        action = mapping.get(gesture, None)
+
         return jsonify({
             "hand_detected": True,
-            "gesture": labels[idx],
-            "confidence": round(float(probs[idx]) * 100, 2),
-            "profile": "default",
-            "last_action": None,
-            "action": None,
+            "gesture": gesture,
+            "confidence": confidence,
+            "profile": active_profile,
+            "last_action": action,
+            "action": action,
             "stable": True
         })
 
     except Exception as e:
         return jsonify({"error": str(e)})
+
 
 # ── RUN ───────────────────────────────────────
 if __name__ == "__main__":
