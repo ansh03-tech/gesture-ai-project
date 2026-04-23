@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>GestureScript V1.5</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+
+<!-- ── HEADER ──────────────────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <span class="logo-icon">✋</span>
+    <span class="logo-text">GestureScript <sup>V1.5</sup></span>
+  </div>
+  <nav id="nav">
+    <button class="nav-btn active" data-page="live">▶ Live</button>
+    <button class="nav-btn" data-page="train">⊕ Train</button>
+    <button class="nav-btn" data-page="profiles">☰ Profiles</button>
+    <button class="nav-btn" data-page="about">? About</button>
+  </nav>
+  <div id="status-pill">
+    <span id="status-dot"></span>
+    <span id="status-text">Connecting…</span>
+  </div>
+</header>
+
+<!-- ── PAGES ───────────────────────────────────────────────────────────────── -->
+<main>
+
+  <!-- ══ PAGE: LIVE ════════════════════════════════════════════════════════ -->
+  <section id="page-live" class="page active">
+    <div class="live-grid">
+
+      <!-- Camera + overlay -->
+      <div class="camera-wrap">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+
+        <!-- HUD overlay panels -->
+        <div class="hud hud-tl">
+          <div class="hud-label">GESTURE</div>
+          <div id="hud-gesture" class="hud-value">—</div>
+        </div>
+        <div class="hud hud-tr">
+          <div class="hud-label">CONFIDENCE</div>
+          <div id="hud-conf" class="hud-value">0%</div>
+          <div class="conf-bar-wrap"><div id="conf-bar" class="conf-bar"></div></div>
+        </div>
+        <div class="hud hud-bl">
+          <div class="hud-label">PROFILE</div>
+          <div id="hud-profile" class="hud-value">default</div>
+        </div>
+        <div class="hud hud-br">
+          <div class="hud-label">LAST ACTION</div>
+          <div id="hud-action" class="hud-value">—</div>
+        </div>
+
+        <!-- Hold-timer bar (bottom full-width) -->
+        <div class="hold-bar-wrap">
+          <div id="hold-bar" class="hold-bar"></div>
+        </div>
+
+        <!-- No-hand indicator -->
+        <div id="no-hand-msg" class="no-hand-msg hidden">🤚 Show your hand</div>
+      </div>
+
+      <!-- Side panel -->
+      <aside class="live-panel">
+        <div class="panel-card">
+          <h3>Camera Control</h3>
+          <button id="btn-start-cam" class="btn btn-green">Start Camera</button>
+          <button id="btn-stop-cam"  class="btn btn-red hidden">Stop Camera</button>
+        </div>
+
+        <div class="panel-card">
+          <h3>Active Profile</h3>
+          <select id="profile-switcher"></select>
+          <button id="btn-switch-profile" class="btn btn-blue">Switch</button>
+        </div>
+
+        <div class="panel-card">
+          <h3>Gesture → Action Map</h3>
+          <table id="mapping-table">
+            <thead><tr><th>Gesture</th><th>Action</th></tr></thead>
+            <tbody id="mapping-body"></tbody>
+          </table>
+        </div>
+
+        <div class="panel-card">
+          <h3>Model Status</h3>
+          <div id="model-status-box">Not loaded</div>
+        </div>
+      </aside>
+
+    </div><!-- .live-grid -->
+  </section>
+
+  <!-- ══ PAGE: TRAIN ════════════════════════════════════════════════════════ -->
+  <section id="page-train" class="page">
+    <div class="train-grid">
+
+      <div class="panel-card">
+        <h2>1 — Record Gesture Samples</h2>
+        <p class="hint">Hold your gesture in front of the camera, enter its name, then hold "Record" to capture ~50 frames.</p>
+
+        <label>Gesture Name</label>
+        <input id="gesture-name" type="text" placeholder="e.g. thumbs_up" class="inp"/>
+
+        <div class="camera-mini-wrap">
+          <video id="train-video" autoplay playsinline muted></video>
+        </div>
+        <div class="btn-row">
+          <button id="btn-train-cam"    class="btn btn-green">Start Camera</button>
+          <button id="btn-record-start" class="btn btn-orange" disabled>⏺ Record</button>
+          <button id="btn-record-stop"  class="btn btn-red hidden">⏹ Stop</button>
+        </div>
+
+        <div id="record-progress">
+          <div id="record-bar-wrap"><div id="record-bar"></div></div>
+          <span id="record-count">0 frames</span>
+        </div>
+      </div>
+
+      <div class="panel-card">
+        <h2>2 — Train Model</h2>
+        <p class="hint">Once you have at least 2 gestures recorded, click Train to build the classifier.</p>
+        <button id="btn-train" class="btn btn-purple">🧠 Train Model</button>
+        <div id="train-result" class="result-box hidden"></div>
+      </div>
+
+      <div class="panel-card">
+        <h2>Collected Gestures</h2>
+        <ul id="collected-list"><li class="muted">None yet</li></ul>
+        <button id="btn-refresh-gestures" class="btn btn-ghost">↻ Refresh</button>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ══ PAGE: PROFILES ════════════════════════════════════════════════════ -->
+  <section id="page-profiles" class="page">
+    <div class="profiles-grid">
+
+      <div class="panel-card">
+        <h2>Profiles</h2>
+        <div id="profile-list"></div>
+        <hr/>
+        <h3>Create / Edit Profile</h3>
+        <label>Profile Name</label>
+        <input id="new-profile-name" type="text" placeholder="my_profile" class="inp"/>
+        <div id="gesture-action-rows"></div>
+        <button id="btn-add-row" class="btn btn-ghost">+ Add Row</button>
+        <div class="btn-row">
+          <button id="btn-save-profile" class="btn btn-green">Save Profile</button>
+          <button id="btn-export-profile" class="btn btn-blue">⬇ Export JSON</button>
+        </div>
+      </div>
+
+      <div class="panel-card">
+        <h2>Import Profile</h2>
+        <textarea id="import-json" rows="8" placeholder='Paste profile JSON here…&#10;{&#10;  "thumbs_up": "scroll_up",&#10;  "fist": "play_pause"&#10;}'></textarea>
+        <label>Profile Name</label>
+        <input id="import-name" type="text" placeholder="imported" class="inp"/>
+        <button id="btn-import-profile" class="btn btn-purple">⬆ Import</button>
+        <div id="import-result" class="result-box hidden"></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ══ PAGE: ABOUT ════════════════════════════════════════════════════════ -->
+  <section id="page-about" class="page">
+    <div class="about-wrap">
+      <h1>GestureScript V1.5</h1>
+      <p class="tagline">AI-powered gesture automation — built for humans, trained by them.</p>
+
+      <div class="about-grid">
+        <div class="about-card">
+          <h3>🧠 AI Concepts</h3>
+          <ul>
+            <li><b>Supervised Learning</b> — labelled landmark data trains a Random Forest classifier.</li>
+            <li><b>Feature Engineering</b> — 21 MediaPipe landmarks → 42 normalised floats.</li>
+            <li><b>Cross-Validation</b> — 5-fold stratified CV to detect over/underfitting.</li>
+            <li><b>Evaluation Metrics</b> — accuracy, precision, recall, F1, confusion matrix.</li>
+            <li><b>Real-Time Inference</b> — &lt;1 ms prediction latency per frame.</li>
+          </ul>
+        </div>
+        <div class="about-card">
+          <h3>📦 Tech Stack</h3>
+          <ul>
+            <li>Frontend — Vanilla HTML/CSS/JS (no build step)</li>
+            <li>Backend  — Python · Flask · MediaPipe</li>
+            <li>ML Model — scikit-learn RandomForestClassifier</li>
+            <li>Persistence — pickle (model) · JSON (profiles) · CSV (data)</li>
+            <li>Deployment — Hugging Face Spaces / Render / localhost</li>
+          </ul>
+        </div>
+        <div class="about-card">
+          <h3>📚 Syllabus Connections</h3>
+          <ul>
+            <li><b>Data Structures</b> — dicts for O(1) gesture→action lookup; deques for hold timer.</li>
+            <li><b>Search/Optimisation</b> — argmax over probability vector for classification.</li>
+            <li><b>Computational Cost</b> — MediaPipe: ~10ms/frame; RF inference: &lt;1ms; training: &lt;2s.</li>
+            <li><b>Overfitting</b> — training accuracy vs CV accuracy gap detection built-in.</li>
+          </ul>
+        </div>
+        <div class="about-card">
+          <h3>🏗 Architecture</h3>
+          <pre class="arch-text">
+Browser (Webcam)
+    │  base64 JPEG (30 fps)
+    ▼
+Flask /predict
+    │
+    ├─ MediaPipe → 42 landmarks
+    ├─ RandomForest → label + prob
+    ├─ Hold buffer (deque, 15 frames)
+    ├─ Cooldown gate (2 s)
+    └─ Action Engine
+            │
+            └─ pyautogui (local)
+               or log (cloud)
+          </pre>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<!-- ── ACTION TOAST ─────────────────────────────────────────────────────── -->
+<div id="toast" class="toast hidden"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
