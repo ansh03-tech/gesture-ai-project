@@ -2,6 +2,9 @@ from flask import Flask, request, jsonify, send_from_directory
 import pickle
 import numpy as np
 import os
+import cv2
+import mediapipe as mp
+import base64
 
 app = Flask(__name__, static_folder=".", static_url_path="")
 
@@ -12,6 +15,23 @@ with open("model.pkl", "rb") as f:
 model = data["model"]
 labels = data["labels"]
 
+# ── MediaPipe Setup ────────────────────────────
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands(max_num_hands=1)
+
+def extract_landmarks(image):
+    img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    result = hands.process(img_rgb)
+
+    if not result.multi_hand_landmarks:
+        return None
+
+    landmarks = []
+    for lm in result.multi_hand_landmarks[0].landmark:
+        landmarks.extend([lm.x, lm.y])
+
+    return landmarks
+
 # ── Serve frontend ─────────────────────────────
 @app.route("/")
 def serve_index():
@@ -21,7 +41,7 @@ def serve_index():
 def serve_static(path):
     return send_from_directory(".", path)
 
-# ── STATUS (IMPORTANT FIX) ─────────────────────
+# ── STATUS ─────────────────────────────────────
 @app.route("/status")
 def status():
     return jsonify({
@@ -32,43 +52,48 @@ def status():
         "profile_mapping": {}
     })
 
-# ── PREDICT ────────────────────────────────────
+# ── PREDICT (REAL IMPLEMENTATION) ──────────────
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
         req = request.json
 
-        # Your frontend sends "frame", but model expects landmarks
-        # So for now we return a dummy response if frame is sent
-        if "frame" in req:
+        if "frame" not in req:
+            return jsonify({"error": "No frame provided"})
+
+        # Decode base64 frame
+        img_bytes = base64.b64decode(req["frame"])
+        np_arr = np.frombuffer(img_bytes, np.uint8)
+        img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+        # Extract landmarks using MediaPipe
+        landmarks = extract_landmarks(img)
+
+        if landmarks is None:
             return jsonify({
-                "gesture": "demo",
-                "confidence": 50,
-                "hand_detected": True,
+                "hand_detected": False,
+                "gesture": None,
+                "confidence": 0,
                 "profile": "default",
-                "last_action": "none",
+                "last_action": None,
                 "action": None,
                 "stable": False
             })
 
-        # If landmarks are sent (like your earlier test)
-        if "landmarks" in req:
-            arr = np.array(req["landmarks"]).reshape(1, -1)
+        arr = np.array(landmarks).reshape(1, -1)
 
-            probs = model.predict_proba(arr)[0]
-            idx = int(np.argmax(probs))
+        probs = model.predict_proba(arr)[0]
+        idx = int(np.argmax(probs))
 
-            return jsonify({
-                "gesture": labels[idx],
-                "confidence": float(probs[idx] * 100),
-                "hand_detected": True,
-                "profile": "default",
-                "last_action": "none",
-                "action": None,
-                "stable": True
-            })
-
-        return jsonify({"error": "Invalid input format"})
+        return jsonify({
+            "hand_detected": True,
+            "gesture": labels[idx],
+            "confidence": round(float(probs[idx]) * 100, 2),
+            "profile": "default",
+            "last_action": None,
+            "action": None,
+            "stable": True
+        })
 
     except Exception as e:
         return jsonify({"error": str(e)})
