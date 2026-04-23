@@ -1,41 +1,32 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 import pickle
 import numpy as np
 import os
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder=".", static_url_path="")
 
-# ── Load model safely ─────────────────────────────────────────────
-MODEL_PATH = "model.pkl"
-
-if not os.path.exists(MODEL_PATH):
-    raise FileNotFoundError("model.pkl not found. Make sure it is in the project root.")
-
-with open(MODEL_PATH, "rb") as f:
+# Load model
+with open("model.pkl", "rb") as f:
     data = pickle.load(f)
 
 model = data["model"]
 labels = data["labels"]
 
-# ── Routes ───────────────────────────────────────────────────────
+# ── Serve frontend ─────────────────────────────
 @app.route("/")
-def home():
-    return "Gesture API is running"
+def serve_index():
+    return send_from_directory(".", "index.html")
 
+@app.route("/<path:path>")
+def serve_static(path):
+    return send_from_directory(".", path)
+
+# ── API ────────────────────────────────────────
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
-        body = request.get_json()
-
-        if not body or "landmarks" not in body:
-            return jsonify({"error": "Missing 'landmarks' in request"}), 400
-
-        landmarks = body["landmarks"]
-
-        if len(landmarks) != 42:
-            return jsonify({"error": "Expected 42 landmark values"}), 400
-
-        arr = np.array(landmarks).reshape(1, -1)
+        data = request.json["landmarks"]
+        arr = np.array(data).reshape(1, -1)
 
         probs = model.predict_proba(arr)[0]
         idx = int(np.argmax(probs))
@@ -46,10 +37,9 @@ def predict():
         })
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e)})
 
-
-# ── Run server (Render compatible) ───────────────────────────────
+# ── Run ───────────────────────────────────────
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))  # IMPORTANT for deployment
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
