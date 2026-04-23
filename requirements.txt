@@ -1,11 +1,4 @@
-# GestureScript V1.5 — Python dependencies
-# Install with: pip install -r requirements.txt
-
-flask==3.0.3
-flask-cors==4.0.1
-mediapipe==0.10.14
-opencv-python-headless==4.10.0.84
-scikit-learn==1.5.1
-numpy==1.26.4
-pandas==2.2.2
-pyautogui==0.9.54        # optional — needed only for local system actions
+flask
+numpy
+scikit-learn
+gunicorn
