@@ -6,12 +6,17 @@ import base64
 
 app = Flask(__name__, static_folder=".", static_url_path="")
 
-# ── Load model ─────────────────────────────────
-with open("model.pkl", "rb") as f:
-    data = pickle.load(f)
+# ── Load model safely ──────────────────────────
+model = None
+labels = []
 
-model = data["model"]
-labels = data["labels"]
+try:
+    with open("model.pkl", "rb") as f:
+        data = pickle.load(f)
+        model = data["model"]
+        labels = data["labels"]
+except Exception as e:
+    print("⚠️ Model load failed:", e)
 
 # ── Try importing heavy libs (SAFE MODE) ───────
 USE_MEDIAPIPE = True
@@ -61,13 +66,17 @@ def serve_index():
 def serve_static(path):
     return send_from_directory(".", path)
 
+@app.route('/favicon.ico')
+def favicon():
+    return '', 204
+
 
 # ── STATUS ─────────────────────────────────────
 @app.route("/status")
 def status():
     return jsonify({
         "status": "ok",
-        "model_trained": True,
+        "model_trained": model is not None,
         "gestures": labels,
         "active_profile": active_profile,
         "profile_mapping": PROFILES.get(active_profile, {}),
@@ -86,7 +95,7 @@ def get_profile(name):
 
 @app.route("/profile/<name>", methods=["POST"])
 def save_profile(name):
-    PROFILES[name] = request.json
+    PROFILES[name] = request.json or {}
     return jsonify({"status": "saved"})
 
 @app.route("/switch_profile/<name>", methods=["POST"])
@@ -104,13 +113,13 @@ def switch_profile(name):
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
-        req = request.json
+        req = request.json or {}
 
         if "frame" not in req:
             return jsonify({"error": "No frame provided"})
 
-        # 🚫 IF mediapipe not available (Render)
-        if not USE_MEDIAPIPE:
+        # 🚫 Render fallback (no mediapipe)
+        if not USE_MEDIAPIPE or model is None:
             return jsonify({
                 "hand_detected": True,
                 "gesture": "demo",
@@ -121,7 +130,7 @@ def predict():
                 "stable": False
             })
 
-        # ✅ REAL PIPELINE (Local only)
+        # ✅ REAL PIPELINE (Local)
         img_bytes = base64.b64decode(req["frame"])
         np_arr = np.frombuffer(img_bytes, np.uint8)
         img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)

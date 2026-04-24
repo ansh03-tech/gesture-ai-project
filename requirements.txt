@@ -1,5 +1,5 @@
 flask
 numpy
 scikit-learn
-mediapipe
+gunicorn
 opencv-python-headless
