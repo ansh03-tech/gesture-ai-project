@@ -2,8 +2,6 @@ from flask import Flask, request, jsonify, send_from_directory
 import pickle
 import numpy as np
 import os
-import cv2
-import mediapipe as mp
 import base64
 
 app = Flask(__name__, static_folder=".", static_url_path="")
@@ -15,25 +13,35 @@ with open("model.pkl", "rb") as f:
 model = data["model"]
 labels = data["labels"]
 
-# ── MediaPipe Setup ────────────────────────────
-mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(max_num_hands=1)
+# ── Try importing heavy libs (SAFE MODE) ───────
+USE_MEDIAPIPE = True
 
-def extract_landmarks(image):
-    img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    result = hands.process(img_rgb)
+try:
+    import cv2
+    import mediapipe as mp
 
-    if not result.multi_hand_landmarks:
-        return None
+    mp_hands = mp.solutions.hands
+    hands = mp_hands.Hands(max_num_hands=1)
 
-    landmarks = []
-    for lm in result.multi_hand_landmarks[0].landmark:
-        landmarks.extend([lm.x, lm.y])
+    def extract_landmarks(image):
+        img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        result = hands.process(img_rgb)
 
-    return landmarks
+        if not result.multi_hand_landmarks:
+            return None
+
+        landmarks = []
+        for lm in result.multi_hand_landmarks[0].landmark:
+            landmarks.extend([lm.x, lm.y])
+
+        return landmarks
+
+except Exception as e:
+    print("⚠️ MediaPipe disabled:", e)
+    USE_MEDIAPIPE = False
 
 
-# ── PROFILE SYSTEM (FIX) ───────────────────────
+# ── PROFILE SYSTEM ─────────────────────────────
 PROFILES = {
     "default": {
         "thumbs_up": "volume_up",
@@ -54,7 +62,7 @@ def serve_static(path):
     return send_from_directory(".", path)
 
 
-# ── STATUS (FIXED) ─────────────────────────────
+# ── STATUS ─────────────────────────────────────
 @app.route("/status")
 def status():
     return jsonify({
@@ -62,16 +70,15 @@ def status():
         "model_trained": True,
         "gestures": labels,
         "active_profile": active_profile,
-        "profile_mapping": PROFILES.get(active_profile, {})
+        "profile_mapping": PROFILES.get(active_profile, {}),
+        "mediapipe_enabled": USE_MEDIAPIPE
     })
 
 
-# ── PROFILES API (FIXES YOUR ERROR) ────────────
+# ── PROFILES API ───────────────────────────────
 @app.route("/profiles")
 def get_profiles():
-    return jsonify({
-        "profiles": list(PROFILES.keys())
-    })
+    return jsonify({"profiles": list(PROFILES.keys())})
 
 @app.route("/profile/<name>")
 def get_profile(name):
@@ -93,7 +100,7 @@ def switch_profile(name):
     })
 
 
-# ── PREDICT (REAL PIPELINE) ────────────────────
+# ── PREDICT ────────────────────────────────────
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
@@ -102,12 +109,23 @@ def predict():
         if "frame" not in req:
             return jsonify({"error": "No frame provided"})
 
-        # Decode base64 frame
+        # 🚫 IF mediapipe not available (Render)
+        if not USE_MEDIAPIPE:
+            return jsonify({
+                "hand_detected": True,
+                "gesture": "demo",
+                "confidence": 50,
+                "profile": active_profile,
+                "last_action": None,
+                "action": None,
+                "stable": False
+            })
+
+        # ✅ REAL PIPELINE (Local only)
         img_bytes = base64.b64decode(req["frame"])
         np_arr = np.frombuffer(img_bytes, np.uint8)
         img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-        # Extract landmarks
         landmarks = extract_landmarks(img)
 
         if landmarks is None:
@@ -129,7 +147,6 @@ def predict():
         gesture = labels[idx]
         confidence = round(float(probs[idx]) * 100, 2)
 
-        # Get mapped action
         mapping = PROFILES.get(active_profile, {})
         action = mapping.get(gesture, None)
 
