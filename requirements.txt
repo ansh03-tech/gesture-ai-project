@@ -3,3 +3,4 @@ numpy
 scikit-learn
 gunicorn
 opencv-python-headless
+mediapipe==0.10.9
